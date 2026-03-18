@@ -1,0 +1,13 @@
+name = "capacities-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [
+  { name = "CAPACITIES_MCP", class_name = "CapacitiesMCP" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["CapacitiesMCP"]
