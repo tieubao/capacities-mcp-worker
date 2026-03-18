@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createClient } from "./capacities";
 
-interface Env {
+export interface Env {
   MCP_OBJECT: DurableObjectNamespace;
   CAPACITIES_API_KEY: string;
 }
@@ -15,6 +15,9 @@ export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
   });
 
   private get api() {
+    if (!this.env.CAPACITIES_API_KEY) {
+      throw new Error("CAPACITIES_API_KEY is not configured. Set it with: npx wrangler secret put CAPACITIES_API_KEY");
+    }
     return createClient(this.env.CAPACITIES_API_KEY);
   }
 
@@ -39,7 +42,7 @@ export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
         spaceId: z.string().describe("Space ID (find in Capacities Settings > Space settings)"),
       },
       async ({ spaceId }) => {
-        const data = await this.api.get(`/space-info/${spaceId}`);
+        const data = await this.api.get(`/space-info?spaceid=${spaceId}`);
         return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -50,12 +53,11 @@ export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
       "Search content across Capacities spaces. Returns matching object titles and IDs (not full content, API limitation).",
       {
         searchTerm: z.string().describe("Text to search for"),
-        spaceIds: z.array(z.string()).optional().describe("Limit search to specific space IDs"),
+        spaceId: z.string().describe("Space ID to search in"),
         mode: z.enum(["fullText", "title"]).optional().default("fullText").describe("Search mode"),
       },
-      async ({ searchTerm, spaceIds, mode }) => {
-        const body: Record<string, unknown> = { searchTerm, mode: mode || "fullText" };
-        if (spaceIds?.length) body.spaceIds = spaceIds;
+      async ({ searchTerm, spaceId, mode }) => {
+        const body: Record<string, unknown> = { searchTerm, spaceId, mode: mode || "fullText" };
         const data = await this.api.post("/lookup", body);
         return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
       }
@@ -131,7 +133,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // Health check
+    // Health check — no auth required
     if (url.pathname === "/" || url.pathname === "/health") {
       return new Response(
         JSON.stringify({ status: "ok", service: "capacities-mcp" }),
