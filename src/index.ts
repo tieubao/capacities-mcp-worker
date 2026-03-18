@@ -2,10 +2,12 @@ import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createClient } from "./capacities";
+import { checkAuth } from "./auth";
 
-interface Env {
+export interface Env {
   MCP_OBJECT: DurableObjectNamespace;
   CAPACITIES_API_KEY: string;
+  MCP_AUTH_KEY?: string;
 }
 
 export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
@@ -15,6 +17,9 @@ export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
   });
 
   private get api() {
+    if (!this.env.CAPACITIES_API_KEY) {
+      throw new Error("CAPACITIES_API_KEY is not configured. Set it with: npx wrangler secret put CAPACITIES_API_KEY");
+    }
     return createClient(this.env.CAPACITIES_API_KEY);
   }
 
@@ -131,12 +136,18 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // Health check
+    // Health check — no auth required
     if (url.pathname === "/" || url.pathname === "/health") {
       return new Response(
         JSON.stringify({ status: "ok", service: "capacities-mcp" }),
         { headers: { "content-type": "application/json" } }
       );
+    }
+
+    // Auth gate for MCP endpoints
+    if (url.pathname.startsWith("/sse") || url.pathname.startsWith("/mcp")) {
+      const authError = checkAuth(request, env);
+      if (authError) return authError;
     }
 
     // SSE transport (legacy clients like Claude Desktop via mcp-remote)

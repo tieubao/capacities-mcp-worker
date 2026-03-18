@@ -1,5 +1,29 @@
 const API_BASE = "https://api.capacities.io";
 
+export class CapacitiesApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly endpoint: string,
+    public readonly body: string
+  ) {
+    super(CapacitiesApiError.friendlyMessage(status, endpoint, body));
+    this.name = "CapacitiesApiError";
+  }
+
+  private static friendlyMessage(status: number, endpoint: string, body: string): string {
+    switch (true) {
+      case status === 401 || status === 403:
+        return "Capacities API authentication failed. Check that your API key is valid in Capacities Settings > API.";
+      case status === 429:
+        return `Rate limit exceeded for ${endpoint}. The Capacities API limits requests per 60-second window. Wait and retry.`;
+      case status >= 500:
+        return `Capacities API is temporarily unavailable (${status}). Try again shortly.`;
+      default:
+        return `Capacities API request failed (${status}): ${body.slice(0, 200)}`;
+    }
+  }
+}
+
 export interface CapacitiesClient {
   get(path: string): Promise<unknown>;
   post(path: string, body: unknown): Promise<unknown>;
@@ -18,7 +42,7 @@ export function createClient(apiKey: string): CapacitiesClient {
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Capacities API ${method} ${path} failed (${res.status}): ${text}`);
+      throw new CapacitiesApiError(res.status, path, text);
     }
 
     const contentType = res.headers.get("content-type") || "";
