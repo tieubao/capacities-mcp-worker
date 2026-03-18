@@ -4,7 +4,7 @@ import { z } from "zod";
 import { createClient } from "./capacities";
 
 interface Env {
-  CAPACITIES_MCP: DurableObjectNamespace;
+  MCP_OBJECT: DurableObjectNamespace;
   CAPACITIES_API_KEY: string;
 }
 
