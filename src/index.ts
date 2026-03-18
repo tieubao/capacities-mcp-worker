@@ -2,12 +2,10 @@ import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createClient } from "./capacities";
-import { checkAuth } from "./auth";
 
 export interface Env {
   MCP_OBJECT: DurableObjectNamespace;
   CAPACITIES_API_KEY: string;
-  MCP_AUTH_KEY?: string;
 }
 
 export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
@@ -44,7 +42,7 @@ export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
         spaceId: z.string().describe("Space ID (find in Capacities Settings > Space settings)"),
       },
       async ({ spaceId }) => {
-        const data = await this.api.get(`/space-info/${spaceId}`);
+        const data = await this.api.get(`/space-info?spaceid=${spaceId}`);
         return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
       }
     );
@@ -55,12 +53,11 @@ export class CapacitiesMCP extends McpAgent<Env, {}, {}> {
       "Search content across Capacities spaces. Returns matching object titles and IDs (not full content, API limitation).",
       {
         searchTerm: z.string().describe("Text to search for"),
-        spaceIds: z.array(z.string()).optional().describe("Limit search to specific space IDs"),
+        spaceId: z.string().describe("Space ID to search in"),
         mode: z.enum(["fullText", "title"]).optional().default("fullText").describe("Search mode"),
       },
-      async ({ searchTerm, spaceIds, mode }) => {
-        const body: Record<string, unknown> = { searchTerm, mode: mode || "fullText" };
-        if (spaceIds?.length) body.spaceIds = spaceIds;
+      async ({ searchTerm, spaceId, mode }) => {
+        const body: Record<string, unknown> = { searchTerm, spaceId, mode: mode || "fullText" };
         const data = await this.api.post("/lookup", body);
         return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
       }
@@ -142,12 +139,6 @@ export default {
         JSON.stringify({ status: "ok", service: "capacities-mcp" }),
         { headers: { "content-type": "application/json" } }
       );
-    }
-
-    // Auth gate for MCP endpoints
-    if (url.pathname.startsWith("/sse") || url.pathname.startsWith("/mcp")) {
-      const authError = checkAuth(request, env);
-      if (authError) return authError;
     }
 
     // SSE transport (legacy clients like Claude Desktop via mcp-remote)
